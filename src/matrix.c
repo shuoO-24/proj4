@@ -414,29 +414,36 @@ int neg_matrix(matrix *result, matrix *mat) {
 // which can occurs low performance)
 int abs_matrix(matrix *result, matrix *mat) {
     /* TODO: YOUR CODE HERE */
-    int rows = mat->rows;
-    int cols = mat->cols;
-    int i = 0;
+    int len = result->rows * result->cols;
     int stride = 16;
-    __m256d vector[4];
-    double *resultData, *matData;
-#pragma omp for
-    for(int i = 0; i < rows * cols / stride * stride; i += stride) {
-        resultData = result->data + i;
-        matData = result->data + i;
-	    // mask off sign bit using andnot
-        vector[0] = _mm256_andnot_pd(_mm256_set1_pd(-0.0f), _mm256_loadu_pd(matData));
-        vector[1] = _mm256_andnot_pd(_mm256_set1_pd(-0.0f), _mm256_loadu_pd(matData + 4));
-        vector[2] = _mm256_andnot_pd(_mm256_set1_pd(-0.0f), _mm256_loadu_pd(matData + 8));
-        vector[3] = _mm256_andnot_pd(_mm256_set1_pd(-0.0f), _mm256_loadu_pd(matData + 12));
-        _mm256_storeu_pd(resultData, vector[0]);
-        _mm256_storeu_pd(resultData + 4, vector[1]);
-        _mm256_storeu_pd(resultData + 8, vector[2]);
-        _mm256_storeu_pd(resultData + 12, vector[3]);
+    int it_ub = len / stride * stride;
+
+#pragma omp parallel num_threads(8)
+{
+    __m256d vecs[4];
+    double* result_this_star_addr;
+    double* mat_this_data_addr;
+    #pragma omp for
+    for (int i = 0; i < it_ub; i += stride) {
+        result_this_star_addr = result->data + i;
+        mat_this_data_addr = mat->data + i;
+
+        // unseting sign bit does the trick
+        vecs[0] = _mm256_andnot_pd(_mm256_set1_pd(-0.0f), _mm256_loadu_pd(mat_this_data_addr));
+        vecs[1] = _mm256_andnot_pd(_mm256_set1_pd(-0.0f), _mm256_loadu_pd(mat_this_data_addr+4));
+        vecs[2] = _mm256_andnot_pd(_mm256_set1_pd(-0.0f), _mm256_loadu_pd(mat_this_data_addr+8));
+        vecs[3] = _mm256_andnot_pd(_mm256_set1_pd(-0.0f), _mm256_loadu_pd(mat_this_data_addr+12));
+
+        _mm256_storeu_pd(result_this_star_addr, vecs[0]);
+        _mm256_storeu_pd(result_this_star_addr+4, vecs[1]);
+        _mm256_storeu_pd(result_this_star_addr+8, vecs[2]);
+        _mm256_storeu_pd(result_this_star_addr+12, vecs[3]);
+    }
+}
+
+    for (int i = it_ub; i < len; i++) {
+        result->data[i] = mat->data[i] < 0 ? -mat->data[i] : mat->data[i];
     }
     
-    for (i = rows * cols / stride * stride; i < rows * cols; ++i) {
-        *(result->data + i) = *(mat->data + i) < 0 ? (-1) * *(mat->data + i) : *(mat->data + i);
-    }
     return 0;
 }
