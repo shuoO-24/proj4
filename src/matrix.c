@@ -250,14 +250,6 @@ int sub_matrix(matrix *result, matrix *mat1, matrix *mat2) {
     return 0;
 }
 
-int check_dim_match_mul(matrix *result, matrix *mat1, matrix *mat2)
-{
-    if (mat1->cols != mat2->rows || result->rows != mat1->rows || result->cols != mat2->cols) {
-        return 0;
-    }
-
-    return 1;
-}
 
 double dot_prod(double* a, double* b, int n) {
     double sum = 0;
@@ -383,44 +375,42 @@ void copy_matrix(matrix *des, matrix *src) {
 //But using four nested loop for statement can cause significantly low performance, we should change some algorithms.
 int pow_matrix(matrix *result, matrix *mat, int pow) {
     /* TODO: YOUR CODE HERE */
+    // use bit-wise operation to square
+    matrix *tmp;
+    matrix *cur;
+    allocate_matrix(&tmp, result->rows, result->cols);
+    allocate_matrix(&cur, result->rows, result->cols);   
 
-    matrix* tmp_mat;
-    allocate_matrix(&tmp_mat, result->rows, result->cols);
-    matrix* mat_ith_pow;
-    allocate_matrix(&mat_ith_pow, result->rows, result->cols);
-
-    // initial value for the result matrix: the identity matrix
     fill_matrix(result, 0);
-    for (int i = 0; i < mat->rows; i++) {
-        set(result, i, i, 1);
+    for (int i = 0; i < mat->rows; ++i) {
+        *(result->data + i * mat->cols + i) = 1;
     }
-
-    // initial value for the mat_ith_pow matrix: mat^1
-    copy_matrix(mat_ith_pow, mat);
-
-    // by matrix multiplication, logn algorithm
-    int is_bit_set;
+    copy_matrix(tmp, mat);
+    copy_matrix(cur, mat);
+    
+    // squaring
     while (pow > 0) {
-        is_bit_set = pow & 0x01;
-        if (is_bit_set) {
-            copy_matrix(tmp_mat, result);
-            mul_matrix(result, tmp_mat, mat_ith_pow);
+        // if current LSB of pow == 1
+        if (pow & 0x1) {
+            // store tmp squaring result
+            copy_matrix(tmp, result);
+            // res = res * a;
+            mul_matrix(result, tmp, cur);
+            // pow = 0b1100 = 12 -- (mat^(2^2)) * mat^1 * mat^1
+            // pow = 0b100 = 4 -- (mat^(2^2)) * mat^1 * mat^1
         }
-
         pow = pow >> 1;
-        // compute mat^{2^i} by squaring
-        // 1. store old value of mat_ith_pow into tmp_mat
-        copy_matrix(tmp_mat, mat_ith_pow);
-        // 2. increase power by 1
-        mul_matrix(mat_ith_pow, tmp_mat, tmp_mat);
+        // square
+        // a = a * a;
+        copy_matrix(tmp, cur);
+        mul_matrix(cur, tmp, tmp);
     }
-
-    deallocate_matrix(mat_ith_pow);
-    deallocate_matrix(tmp_mat);
+    
+    deallocate_matrix(cur);
+    deallocate_matrix(tmp);
 
     return 0;
 }
-
 /*
  * (OPTIONAL)
  * Store the result of element-wise negating mat's entries to `result`.
