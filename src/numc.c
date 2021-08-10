@@ -508,22 +508,26 @@ static PyObject *Matrix61c_set_value(Matrix61c *self, PyObject* args) {
     // PyObject *val = NULL;
     // if (PyArg_UnpackTuple(args, "args", 3, 3, &rows, &cols, &val)) {
     //    if (rows && cols && val && PyLong_Check(rows) && PyLong_Check(cols) && (PyLong_Check(val) || PyFloat_Check(val))
-    int col, row;
     double val;
-    int rows = (self->mat)->rows;
-    int cols = (self->mat)->cols;
-    if (PyArg_ParseTuple(args, "iid", &row, &col, &val)) {
-        if (row > rows || col > cols) {
-            PyErr_SetString(PyExc_IndexError, "Index out of range");
-            return NULL;
-        }
-        set(self->mat, row, col, val);
-	return Py_None;
+    int row, col;
+
+    // check if parsing arguments correctly
+    if (!PyArg_ParseTuple(args, "iid", &row, &col, &val)) {
+        PyErr_SetString(PyExc_TypeError, "failed to parse args");
+        return Py_None;
     }
-    else{
-        PyErr_SetString(PyExc_TypeError, "Incorrect type!_set");
-        return NULL;
+
+    matrix* mat1 = self->mat;
+    // check if index out of range
+    if (row < 0 || row >= mat1->rows || col < 0 || col >= mat1->cols) {
+        PyErr_SetString(PyExc_IndexError, "index out of range!");
+        return Py_None;
     }
+
+    // all checks passed
+    set(mat1, row, col, val);
+
+    return Py_None;
 }
 
 /*
