@@ -167,7 +167,7 @@ double get(matrix *mat, int row, int col) {
 void set(matrix *mat, int row, int col, double val) {
     /* TODO: YOUR CODE HERE */
     unsigned int index = (mat->cols)*row + col;
-    *((mat->data) + index) = val;
+    *((mat->data)+index) = val;
     return;
 }
 
@@ -250,27 +250,18 @@ int sub_matrix(matrix *result, matrix *mat1, matrix *mat2) {
     return 0;
 }
 
-
-double dot_prod(double* a, double* b, int n) {
+double dot_product(double* a, double* b, int n) {
     double sum = 0;
-
-    // Initialize to 0
-    double mem_vals[4] = {0, 0, 0, 0};
-    __m256d vector[4] = {
-        _mm256_loadu_pd(mem_vals),
-        _mm256_loadu_pd(mem_vals),
-        _mm256_loadu_pd(mem_vals),
-        _mm256_loadu_pd(mem_vals)
-    };
+    double vals[4] = {0, 0, 0, 0};
+    __m256d vecs[4] = {_mm256_loadu_pd(vals), _mm256_loadu_pd(vals), _mm256_loadu_pd(vals), _mm256_loadu_pd(vals)};
 
     for (int i = 0; i < n / 16 * 16; i += 16) {
-        double* a_this_start_addr = a + i;
-        double* b_this_start_addr = b + i;
-
-        vector[0] = _mm256_fmadd_pd(_mm256_loadu_pd(a_this_start_addr), _mm256_loadu_pd(b_this_start_addr), vector[0]);
-        vector[1] = _mm256_fmadd_pd(_mm256_loadu_pd(a_this_start_addr+4), _mm256_loadu_pd(b_this_start_addr+4), vector[1]);
-        vector[2] = _mm256_fmadd_pd(_mm256_loadu_pd(a_this_start_addr+8), _mm256_loadu_pd(b_this_start_addr+8), vector[2]);
-        vector[3] = _mm256_fmadd_pd(_mm256_loadu_pd(a_this_start_addr+12), _mm256_loadu_pd(b_this_start_addr+12), vector[3]);
+        double* vA_addr = a + i;
+        double* vB_addr = b + i;
+        vecs[0] = _mm256_fmadd_pd(_mm256_loadu_pd(vA_addr), _mm256_loadu_pd(vB_addr), vecs[0]);
+        vecs[1] = _mm256_fmadd_pd(_mm256_loadu_pd(vA_addr+4), _mm256_loadu_pd(vB_addr+4), vecs[1]);
+        vecs[2] = _mm256_fmadd_pd(_mm256_loadu_pd(vA_addr+8), _mm256_loadu_pd(vB_addr+8), vecs[2]);
+        vecs[3] = _mm256_fmadd_pd(_mm256_loadu_pd(vA_addr+12), _mm256_loadu_pd(vB_addr+12), vecs[3]);
     }
 
     for (int i = n / 16 * 16; i < n; i++) {
@@ -278,8 +269,8 @@ double dot_prod(double* a, double* b, int n) {
     }
 
     for (int i = 0; i < 4; i++) {
-        _mm256_storeu_pd(mem_vals, vector[i]);
-        sum += mem_vals[0] + mem_vals[1] + mem_vals[2] + mem_vals[3];
+        _mm256_storeu_pd(vals, vecs[i]);
+        sum += vals[0] + vals[1] + vals[2] + vals[3];
     }
 
     return sum;
@@ -294,36 +285,37 @@ int mul_matrix(matrix *result, matrix *mat1, matrix *mat2) {
     /* TODO: YOUR CODE HERE */
 /*
     // check if dim matches
-    if (mat1->cols != mat2->rows || result->rows != mat1->rows || result->cols != mat2->cols) {
-        return -1;
+    if (mat1->rows != mat2->rows || mat1->cols != mat2->cols || result->rows != mat1->rows || result->cols != mat1->cols) {
+        return 1;
     }
 
-    int rows, K, cols;
-    rows = mat1->rows;
-    K = mat1->cols;
-    cols = mat2->cols;
+    int rows = mat1->rows;
+    int K = mat1->cols;
+    int cols = mat2->cols;
 
-    // transposing
+    // transpose mat2 to offer better memory access pattern
     matrix *mat2_transpose;
     allocate_matrix(&mat2_transpose, mat2->cols, mat2->rows);
+
 
 #pragma omp parallel num_threads(8)
 {
     #pragma omp for
     for (int i = 0; i < mat2_transpose->rows; i++)
         for (int j = 0; j < mat2_transpose->cols; j++) {
-            mat2_transpose->data[i * mat2_transpose->cols + j] = mat2->data[j * mat2->cols + i];
+            mat2_transpose->data[i*mat2_transpose->cols + j] = mat2->data[j*mat2->cols+i];
         }
 
 #pragma omp barrier
-// The omp barrier directive identifies a synchronization point at which threads in a parallel region will wait until all other threads in that section reach the same point. 
+// The omp barrier directive identifies a synchronization point at which threads in a parallel region will wait until all other threads in that section reach the same point.
 // Statement execution past the omp barrier point then continues in parallel.
     #pragma omp for
     for (int i = 0; i < rows; i++)
         for (int j = 0; j < cols; j++) {
-            result->data[i * cols + j] = dot_prod(mat1->data + i * K, mat2_transpose->data + j * K, K);
+            *(result->data + i * rows + j) = dot_product(mat1->data + i * K, mat2_transpose->data + j * K, K);
         }
 }
+
     deallocate_matrix(mat2_transpose);
     return 0;
 */
@@ -368,6 +360,8 @@ int mul_matrix(matrix *result, matrix *mat1, matrix *mat2) {
     // result->data = temp;
     return 0;
 }
+
+
 /* 
 for(int i = 0; i < mat1->rows; ++i) {
     for(int j = 0; j < mat1->cols; ++j)
@@ -382,36 +376,53 @@ for(int i = 0; i < mat1->rows; ++i) {
 */
 
 
-// Helper function for power function
-void copy_matrix(matrix *des, matrix *src) {
-    int stride = 16;
-    int length = src->rows * src->cols;
-
-#pragma omp parallel num_threads(8)
-{        
-    double *des_addr, *src_addr;
-    for (int i = 0; i < length / stride * stride; i += stride) {
-        des_addr = des->data + i;
-        src_addr = src->data + i;
-        _mm256_storeu_pd(des_addr, _mm256_loadu_pd(src_addr));
-        _mm256_storeu_pd(des_addr + 4, _mm256_loadu_pd(src_addr + 4));   
-        _mm256_storeu_pd(des_addr + 8, _mm256_loadu_pd(src_addr + 8));  
-        _mm256_storeu_pd(des_addr + 12, _mm256_loadu_pd(src_addr + 12));    
-    }
-}
-    for (int i = length / stride * stride; i < length; ++i) {
-        *(des->data + i) = *(src->data + i);
-    }
-}
-
 /*
  * Store the result of raising mat to the (pow)th power to `result`.
  * Return 0 upon success and a nonzero value upon failure.
  * Remember that pow is defined with matrix multiplication, not element-wise multiplication.
  */
+//I revised some errors: 1. Algorithmic error (b/c this is function for matrix power, not elementwise power)
+//2. undetermined variable a,b
+//But using four nested loop for statement can cause significantly low performance, we should change some algorithms.
 int pow_matrix(matrix *result, matrix *mat, int pow) {
     /* TODO: YOUR CODE HERE */
 /*
+    int rows = mat->rows;
+    int cols = mat->cols;
+    int n = pow;
+    double *temp = calloc(rows*cols,sizeof(double));
+    for(int i =0; i < rows; i++){
+        for(int j = 0 ; j < cols; j++){
+            *(temp + i * cols + j) = *(mat->data + i * cols + j);
+        }
+    }
+  
+    // unit matrix
+    for(int i = 0; i < rows; i++){
+        for(int j = 0; j < cols; j++){
+            if(i == j){
+                *(result->data + cols * i + j) = 1;
+            }
+	        else{
+	            *(result->data + cols * i +j) = 0;
+	        }
+        }
+    }
+    
+    while (n > 0) {
+        if (n % 2 == 1){
+            mul_matrix(result, mat, result);
+	        n = n-1;
+        } else{
+            n = n/2;
+            mul_matrix(mat,mat,mat);
+	    }
+    }
+    
+    free(mat->data);
+    mat->data = temp;
+    return 0;
+*/
     // use bit-wise operation to square
     matrix *tmp;
     matrix *cur;
@@ -422,95 +433,35 @@ int pow_matrix(matrix *result, matrix *mat, int pow) {
     for (int i = 0; i < mat->rows; ++i) {
         *(result->data + i * mat->cols + i) = 1;
     }
-
+    // copy_matrix(tmp, mat);
+    memcpy(tmp->data, mat->data, tmp->cols * tmp->rows * sizeof(double));
     // copy_matrix(cur, mat);
-    memcpy(cur->data, mat->data, mat->rows * mat->cols * sizeof(double));
-
-    // 
+    memcpy(cur->data, mat->data, mat->cols * mat->rows * sizeof(double));
+    
+    // squaring
     while (pow > 0) {
         // if current LSB of pow == 1
-        if (pow & 0x01) {
-            // raise one power
-            // r <- r * x
+        if (pow & 0x1) {
+            // store tmp squaring result
             // copy_matrix(tmp, result);
-            memcpy(tmp->data, result->data, tmp->rows * tmp->cols * sizeof(double));
+            memcpy(tmp->data, result->data, tmp->cols * tmp->rows * sizeof(double));
+            // res = res * a;
             mul_matrix(result, tmp, cur);
         }
-        // r <- r * r
+        pow = pow >> 1;
+        // square
+        // a = a * a;
         // copy_matrix(tmp, cur);
         memcpy(tmp->data, cur->data, tmp->rows * tmp->cols * sizeof(double));
         mul_matrix(cur, tmp, tmp);
-        pow = pow >> 1;
     }
     
-    deallocate_matrix(cur);
-    deallocate_matrix(tmp);
-    return 0;
-*/
-    // int rows = mat->rows;
-    // int cols = mat->cols;
-    // int n = pow;
-    // double *temp = calloc(rows*cols,sizeof(double));
-    // for(int i =0; i < rows; i++){
-    //     for(int j = 0 ; j < cols; j++){
-    //         *(temp + i * cols + j) = *(mat->data + i * cols + j);
-    //     }
-    // }
-  
-    // // unit matrix
-    // for(int i = 0; i < rows; i++){
-    //     for(int j = 0; j < cols; j++){
-    //         if(i == j){
-    //             *(result->data + cols * i + j) = 1;
-    //         }
-	//         else{
-	//             *(result->data + cols * i +j) = 0;
-	//         }
-    //     }
-    // }
-    
-    // while (n > 0) {
-    //     if (n % 2 == 1){
-    //         mul_matrix(result, mat, result);
-	//         n = n-1;
-    //     } else{
-    //         n = n/2;
-    //         mul_matrix(mat,mat,mat);
-	//     }
-    // }
-    
-    // free(mat->data);
-    // mat->data = temp;
-    // return 0;
-    matrix* tmp;
-    allocate_matrix(&tmp, result->rows, result->cols);
-    matrix* cur;
-    allocate_matrix(&cur, result->rows, result->cols);
-
-    // initial value for the result matrix: the identity matrix
-    fill_matrix(result, 0);
-    for (int i = 0; i < mat->rows; i++) {
-        set(result, i, i, 1);
-    }
-
-    copy_matrix(cur, mat);
-    // memcpy(cur, mat, mat->rows * mat->cols * sizeof(double));
-
-    while (pow > 0) {
-        if (pow & 0x01) {
-            copy_matrix(tmp, result);
-            mul_matrix(result, tmp, cur);
-        }
-        pow = pow >> 1;
-        copy_matrix(tmp, cur);
-        mul_matrix(cur, tmp, tmp);
-    }
-
     deallocate_matrix(cur);
     deallocate_matrix(tmp);
 
     return 0;
 }
+
 
 /*
  * (OPTIONAL)
@@ -542,33 +493,29 @@ int neg_matrix(matrix *result, matrix *mat) {
 // which can occurs low performance)
 int abs_matrix(matrix *result, matrix *mat) {
     /* TODO: YOUR CODE HERE */
-    int length = result->rows * result->cols;
+    int rows = mat->rows;
+    int cols = mat->cols;
+    int i = 0;
     int stride = 16;
-
-#pragma omp parallel num_threads(8)
-{
     __m256d vector[4];
-    double* result_addr;
-    double* mat_addr;
-    #pragma omp for
-    for (int i = 0; i < length / stride * stride; i += stride) {
-        result_addr = result->data + i;
-        mat_addr = mat->data + i;
-        // mask off sign bit using andnot
-        vector[0] = _mm256_andnot_pd(_mm256_set1_pd(-0.0f), _mm256_loadu_pd(mat_addr));
-        vector[1] = _mm256_andnot_pd(_mm256_set1_pd(-0.0f), _mm256_loadu_pd(mat_addr + 4));
-        vector[2] = _mm256_andnot_pd(_mm256_set1_pd(-0.0f), _mm256_loadu_pd(mat_addr + 8));
-        vector[3] = _mm256_andnot_pd(_mm256_set1_pd(-0.0f), _mm256_loadu_pd(mat_addr + 12));
-        _mm256_storeu_pd(result_addr, vector[0]);
-        _mm256_storeu_pd(result_addr + 4, vector[1]);
-        _mm256_storeu_pd(result_addr + 8, vector[2]);
-        _mm256_storeu_pd(result_addr + 12, vector[3]);
+    double *resultData, *matData;
+#pragma omp for
+    for(int i = 0; i < rows * cols / stride * stride; i += stride) {
+        resultData = result->data + i;
+        matData = result->data + i;
+   // mask off sign bit using andnot
+        vector[0] = _mm256_andnot_pd(_mm256_set1_pd(-0.0f), _mm256_loadu_pd(matData));
+        vector[1] = _mm256_andnot_pd(_mm256_set1_pd(-0.0f), _mm256_loadu_pd(matData + 4));
+        vector[2] = _mm256_andnot_pd(_mm256_set1_pd(-0.0f), _mm256_loadu_pd(matData + 8));
+        vector[3] = _mm256_andnot_pd(_mm256_set1_pd(-0.0f), _mm256_loadu_pd(matData + 12));
+        _mm256_storeu_pd(resultData, vector[0]);
+        _mm256_storeu_pd(resultData + 4, vector[1]);
+        _mm256_storeu_pd(resultData + 8, vector[2]);
+        _mm256_storeu_pd(resultData + 12, vector[3]);
     }
-}
-    
-    for (int i = length / stride * stride; i < length; i++) {
-        *(result->data + i) = *(mat->data + i) < 0 ? -*(mat->data + i) : *(mat->data + i);
+   
+    for (i = rows * cols / stride * stride; i < rows * cols; ++i) {
+        *(result->data + i) = *(mat->data + i) < 0 ? (-1) * *(mat->data + i) : *(mat->data + i);
     }
-
     return 0;
 }
