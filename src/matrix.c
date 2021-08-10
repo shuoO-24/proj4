@@ -394,7 +394,7 @@ void copy_matrix(matrix *des, matrix *src) {
     int stride = 16;
     int length = src->rows * src->cols;
 
-#pragma omp parallel num_threads(8)
+#pragma omp parallel num_threads(4)
 {        
     double *des_addr, *src_addr;
     for (int i = 0; i < length / stride * stride; i += stride) {
@@ -418,116 +418,22 @@ void copy_matrix(matrix *des, matrix *src) {
  */
 int pow_matrix(matrix *result, matrix *mat, int pow) {
     /* TODO: YOUR CODE HERE */
-/*
-    // use bit-wise operation to square
-    matrix *tmp;
-    matrix *cur;
-    allocate_matrix(&tmp, result->rows, result->cols);
-    allocate_matrix(&cur, result->rows, result->cols);   
-
-    fill_matrix(result, 0);
-    for (int i = 0; i < mat->rows; ++i) {
+    matrix* tmp_mat;
+    allocate_matrix(&tmp_mat, result->rows, result->cols);
+    for (int i = 0; i < mat->rows; i++) {
         *(result->data + i * mat->cols + i) = 1;
     }
-
-    // copy_matrix(cur, mat);
-    memcpy(cur->data, mat->data, mat->rows * mat->cols * sizeof(double));
-
-    // 
-    while (pow > 0) {
-        // if current LSB of pow == 1
-        if (pow & 0x01) {
-            // raise one power
-            // r <- r * x
-            // copy_matrix(tmp, result);
-            memcpy(tmp->data, result->data, tmp->rows * tmp->cols * sizeof(double));
-            mul_matrix(result, tmp, cur);
-        }
-        // r <- r * r
-        // copy_matrix(tmp, cur);
-        memcpy(tmp->data, cur->data, tmp->rows * tmp->cols * sizeof(double));
-        mul_matrix(cur, tmp, tmp);
-        pow = pow >> 1;
+    // double *tmp[mat->rows * mat->rows];
+    while (pow) {
+        if (pow % 2 == 1){
+            memcpy(tmp_mat->data, mat->data, mat->rows * mat->rows * 8);
+            mul_matrix(result, mat, result);
+	        pow--;
+        } 
+        pow /= 2;
+        memcpy(tmp_mat->data, mat->data, mat->rows * mat->rows * 8);
+        mul_matrix(mat, tmp_mat, tmp_mat);
     }
-    
-    deallocate_matrix(cur);
-    deallocate_matrix(tmp);
-    return 0;
-*/
-    // int rows = mat->rows;
-    // int cols = mat->cols;
-    // int n = pow;
-    // double *temp = calloc(rows*cols,sizeof(double));
-    // for(int i =0; i < rows; i++){
-    //     for(int j = 0 ; j < cols; j++){
-    //         *(temp + i * cols + j) = *(mat->data + i * cols + j);
-    //     }
-    // }
-  
-    // // unit matrix
-    // for(int i = 0; i < rows; i++){
-    //     for(int j = 0; j < cols; j++){
-    //         if(i == j){
-    //             *(result->data + cols * i + j) = 1;
-    //         }
-	//         else{
-	//             *(result->data + cols * i +j) = 0;
-	//         }
-    //     }
-    // }
-    
-    // while (n > 0) {
-    //     if (n % 2 == 1){
-    //         mul_matrix(result, mat, result);
-	//         n = n-1;
-    //     } else{
-    //         n = n/2;
-    //         mul_matrix(mat,mat,mat);
-	//     }
-    // }
-    
-    // free(mat->data);
-    // mat->data = temp;
-    // return 0;
-    
-    // use bit-wise operation to square
-    matrix *tmp;
-    matrix *cur;
-    allocate_matrix(&tmp, result->rows, result->cols);
-    allocate_matrix(&cur, result->rows, result->cols);   
-
-    fill_matrix(result, 0);
-    for (int i = 0; i < mat->rows; ++i) {
-        *(result->data + i * mat->cols + i) = 1;
-    }
-    // fill_matrix(result, 1);
-    // copy_matrix(tmp, mat);
-    // memcpy(tmp->data, mat->data, tmp->cols * tmp->rows * sizeof(double));
-    // copy_matrix(cur, mat);
-    memcpy(cur->data, mat->data, mat->cols * mat->rows * 8);
-    
-    // squaring
-    int log = 0;
-    while (pow > 0) {
-        log = pow & 0x01;
-        // if current LSB of pow == 1
-        if (pow & 0x1) {
-            // store tmp squaring result
-            // copy_matrix(tmp, result);
-            memcpy(tmp->data, result->data, tmp->cols * tmp->rows * 8);
-            // res = res * a;
-            mul_matrix(result, tmp, cur);
-        }
-        pow = pow >> 1;
-        // square
-        // a = a * a;
-        // copy_matrix(tmp, cur);
-        memcpy(tmp->data, cur->data, tmp->rows * tmp->cols * 8);
-        mul_matrix(cur, tmp, tmp);
-    }
-    
-    deallocate_matrix(cur);
-    deallocate_matrix(tmp);
 
     return 0;
 }
