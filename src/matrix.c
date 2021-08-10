@@ -156,7 +156,7 @@ void deallocate_matrix(matrix *mat) {
  * You may assume `row` and `col` are valid.
  */
 double get(matrix *mat, int row, int col) {
-    return mat->data[row * mat->cols + col];
+    return *(mat->data + row * mat->cols + col);
 }
 
 /*
@@ -165,7 +165,7 @@ double get(matrix *mat, int row, int col) {
  */
 void set(matrix *mat, int row, int col, double val) {
     /* TODO: YOUR CODE HERE */
-    mat->data[row * mat->cols + col] = val;
+    *(mat->data + row * mat->cols + col) = val;
 }
 
 /*
@@ -173,12 +173,30 @@ void set(matrix *mat, int row, int col, double val) {
  */
 void fill_matrix(matrix *mat, double val) {
     /* TODO: YOUR CODE HERE */
-    for (int i = 0; i < mat->cols; ++i) {
-        for (int j = 0; j < mat->rows; ++j) {
-            *(mat->data + i * mat->cols + j) = val;
-        }
+    int stride = 16;
+    double vals[4] = {val, val, val, val};
+    __m256d vecs[4] = {_mm256_loadu_pd(vals), _mm256_loadu_pd(vals),  _mm256_loadu_pd(vals), _mm256_loadu_pd(vals)};
+
+#pragma omp parallel num_threads(8)
+{
+    __m256d vector[4];
+    double* mat1Addr;
+    double* mat2Addr;
+    double* resultAddr;
+    #pragma omp for
+    for(int i = 0; i < mat->rows * mat->cols / stride * stride; i += stride) {
+        resultAddr = mat->data + i;
+        _mm256_storeu_pd(resultAddr, vector[0]);
+        _mm256_storeu_pd(resultAddr + 4, vector[1]);
+        _mm256_storeu_pd(resultAddr + 8, vector[2]);
+        _mm256_storeu_pd(resultAddr + 12, vector[3]);
     }
-    return;
+}
+    for (int i = mat->rows * mat->cols / stride * stride; i < mat->rows * mat->cols; i++) {
+        *(mat->data + i) = val;
+    }
+
+    return 0;
 }
 
 
@@ -251,23 +269,17 @@ int sub_matrix(matrix *result, matrix *mat1, matrix *mat2) {
 double dot_product(double* a, double* b, int n) {
     double sum = 0;
 
-    // Initialize to 0
-    double mem_vals[4] = {0, 0, 0, 0};
-    __m256d vector[4] = {
-        _mm256_loadu_pd(mem_vals),
-        _mm256_loadu_pd(mem_vals),
-        _mm256_loadu_pd(mem_vals),
-        _mm256_loadu_pd(mem_vals)
-    };
+    double vals[4] = {0, 0, 0, 0};
+    __m256d vector[4] = {_mm256_loadu_pd(vals), _mm256_loadu_pd(vals),  _mm256_loadu_pd(vals), _mm256_loadu_pd(vals)};
 
     for (int i = 0; i < n / 16 * 16; i += 16) {
-        double* a_this_start_addr = a + i;
-        double* b_this_start_addr = b + i;
+        double* vA_addr = a + i;
+        double* vB_addr = b + i;
 
-        vector[0] = _mm256_fmadd_pd(_mm256_loadu_pd(a_this_start_addr), _mm256_loadu_pd(b_this_start_addr), vector[0]);
-        vector[1] = _mm256_fmadd_pd(_mm256_loadu_pd(a_this_start_addr+4), _mm256_loadu_pd(b_this_start_addr+4), vector[1]);
-        vector[2] = _mm256_fmadd_pd(_mm256_loadu_pd(a_this_start_addr+8), _mm256_loadu_pd(b_this_start_addr+8), vector[2]);
-        vector[3] = _mm256_fmadd_pd(_mm256_loadu_pd(a_this_start_addr+12), _mm256_loadu_pd(b_this_start_addr+12), vector[3]);
+        vector[0] = _mm256_fmadd_pd(_mm256_loadu_pd(vA_addr), _mm256_loadu_pd(vB_addr), vector);
+        vector[1] = _mm256_fmadd_pd(_mm256_loadu_pd(vA_addr + 4), _mm256_loadu_pd(vB_addr + 4), vector + 8);
+        vector[2] = _mm256_fmadd_pd(_mm256_loadu_pd(vA_addr + 8), _mm256_loadu_pd(vB_addr + 8), vector + 16);
+        vector[3] = _mm256_fmadd_pd(_mm256_loadu_pd(vA_addr + 12), _mm256_loadu_pd(vB_addr + 12), vector + 24);
     }
 
     for (int i = n / 16 * 16; i < n; i++) {
@@ -275,8 +287,8 @@ double dot_product(double* a, double* b, int n) {
     }
 
     for (int i = 0; i < 4; i++) {
-        _mm256_storeu_pd(mem_vals, vector[i]);
-        sum += mem_vals[0] + mem_vals[1] + mem_vals[2] + mem_vals[3];
+        _mm256_storeu_pd(vals, vector[i]);
+        sum += vals[0] + vals[1] + vals[2] + vals[3];
     }
 
     return sum;
@@ -489,22 +501,24 @@ int pow_matrix(matrix *result, matrix *mat, int pow) {
     allocate_matrix(&tmp, result->rows, result->cols);
     allocate_matrix(&cur, result->rows, result->cols);   
 
-    fill_matrix(result, 0);
+    // fill_matrix(result, 0);
     for (int i = 0; i < mat->rows; ++i) {
         *(result->data + i * mat->cols + i) = 1;
     }
     // copy_matrix(tmp, mat);
-    memcpy(tmp->data, mat->data, tmp->cols * tmp->rows * sizeof(double));
+    // memcpy(tmp->data, mat->data, tmp->cols * tmp->rows * sizeof(double));
     // copy_matrix(cur, mat);
-    memcpy(cur->data, mat->data, mat->cols * mat->rows * sizeof(double));
+    memcpy(cur->data, mat->data, mat->cols * mat->rows * 8);
     
     // squaring
+    int log = 0;
     while (pow > 0) {
+        log = pow & 0x01;
         // if current LSB of pow == 1
         if (pow & 0x1) {
             // store tmp squaring result
             // copy_matrix(tmp, result);
-            memcpy(tmp->data, result->data, tmp->cols * tmp->rows * sizeof(double));
+            memcpy(tmp->data, result->data, tmp->cols * tmp->rows * 8);
             // res = res * a;
             mul_matrix(result, tmp, cur);
         }
@@ -512,7 +526,7 @@ int pow_matrix(matrix *result, matrix *mat, int pow) {
         // square
         // a = a * a;
         // copy_matrix(tmp, cur);
-        memcpy(tmp->data, cur->data, tmp->rows * tmp->cols * sizeof(double));
+        memcpy(tmp->data, cur->data, tmp->rows * tmp->cols * 8);
         mul_matrix(cur, tmp, tmp);
     }
     
