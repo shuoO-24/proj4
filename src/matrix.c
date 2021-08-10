@@ -62,22 +62,27 @@ void rand_matrix(matrix *result, unsigned int seed, double low, double high) {
  * Return 0 upon success.
  */
 int allocate_matrix(matrix **mat, int rows, int cols) {
-    if(rows <= 0 || cols <= 0){
-    	return -1;
+    /* TODO: YOUR CODE HERE */
+
+    // Check if row and cols invalid
+    if (rows <= 0 || cols <= 0) {
+        return -1;
     }
-    *mat = (struct matrix *)calloc(1, sizeof(struct matrix));
+
+    *mat = (matrix*)calloc(1, sizeof(struct matrix));
     if (*mat == NULL) {
         return -2;
     }
-    matrix *m = *mat;
-    m->rows = rows;
-    m->cols = cols;
-    m->ref_cnt = 1;
-    m->parent = NULL;
-    m->data = (double *)calloc(rows*cols, sizeof(double)); 
-    // (*mat) = m;
-    if(m->data == NULL){
-       return -2;
+
+    matrix* tmp = *mat;
+    tmp->rows = rows;
+    tmp->cols = cols;
+    tmp->ref_cnt = 1;
+    tmp->parent = NULL;
+    tmp->data = (double *)calloc(rows * cols, sizeof(double));
+
+    if (tmp->data == NULL) {
+        return -2;
     }
     return 0;
 }
@@ -92,6 +97,7 @@ int allocate_matrix(matrix **mat, int rows, int cols) {
  * Return 0 upon success.
  */
 int allocate_matrix_ref(matrix **mat, matrix *from, int offset, int rows, int cols) {
+    /* TODO: YOUR CODE HERE */
     /* TODO: YOUR CODE HERE */
     if(rows <= 0 || cols <= 0 || offset + rows * cols > from->rows * from->cols){
     	return -1;
@@ -157,8 +163,9 @@ void deallocate_matrix(matrix *mat) {
 	// mat = mat->parent;
     }
     return;
-
 }
+
+
 
 /*
  * Returns the double value of the matrix at the given row and column.
@@ -204,12 +211,24 @@ void fill_matrix(matrix *mat, double val) {
     }
 }
 
+
 /*
  * Store the result of adding mat1 and mat2 to `result`.
  * Return 0 upon success and a nonzero value upon failure.
  */
 int add_matrix(matrix *result, matrix *mat1, matrix *mat2){
     // if(mat1->rows != mat2->rows || mat1->cols != mat2->cols || result->rows != mat1->rows || result->cols != mat1->cols){
+    //     return 1;
+    // }
+    // result->rows = mat1->rows;
+    // result->cols = mat1->cols;
+    // for (int index = 0; index< mat1->rows * mat2->cols; index++) {
+    //     *(result->data + index) = *(mat1->data + index) + *(mat2->data + index);
+	// }
+    // if(!result){
+	//     return 0;
+    // }
+    
     int stride = 16;
 
 #pragma omp parallel num_threads(8)
@@ -250,26 +269,39 @@ int sub_matrix(matrix *result, matrix *mat1, matrix *mat2) {
     /* TODO: YOUR CODE HERE */
     return 0;
 }
+ 
 
-double dot_product(double* a, double* b, int n) {
+double dot_prod(double* a, double* b, int n) {
     double sum = 0;
-    double vals[4] = {0, 0, 0, 0};
-    __m256d vector[4] = {_mm256_loadu_pd(vals), _mm256_loadu_pd(vals),  _mm256_loadu_pd(vals), _mm256_loadu_pd(vals)};
+
+    // Initialize to 0
+    double mem_vals[4] = {0, 0, 0, 0};
+    __m256d vecs[4] = {
+        _mm256_loadu_pd(mem_vals),
+        _mm256_loadu_pd(mem_vals),
+        _mm256_loadu_pd(mem_vals),
+        _mm256_loadu_pd(mem_vals)
+    };
+
     for (int i = 0; i < n / 16 * 16; i += 16) {
-        double* vA_addr = a + i;
-        double* vB_addr = b + i;
-        vector[0] = _mm256_fmadd_pd(_mm256_loadu_pd(vA_addr), _mm256_loadu_pd(vB_addr), vector[0]);
-        vector[1] = _mm256_fmadd_pd(_mm256_loadu_pd(vA_addr + 4), _mm256_loadu_pd(vB_addr + 4), vector[1]);
-        vector[2] = _mm256_fmadd_pd(_mm256_loadu_pd(vA_addr + 8), _mm256_loadu_pd(vB_addr + 8), vector[2]);
-        vector[3] = _mm256_fmadd_pd(_mm256_loadu_pd(vA_addr + 12), _mm256_loadu_pd(vB_addr + 12), vector[3]);
+        double* a_this_start_addr = a + i;
+        double* b_this_start_addr = b + i;
+
+        vecs[0] = _mm256_fmadd_pd(_mm256_loadu_pd(a_this_start_addr), _mm256_loadu_pd(b_this_start_addr), vecs[0]);
+        vecs[1] = _mm256_fmadd_pd(_mm256_loadu_pd(a_this_start_addr+4), _mm256_loadu_pd(b_this_start_addr+4), vecs[1]);
+        vecs[2] = _mm256_fmadd_pd(_mm256_loadu_pd(a_this_start_addr+8), _mm256_loadu_pd(b_this_start_addr+8), vecs[2]);
+        vecs[3] = _mm256_fmadd_pd(_mm256_loadu_pd(a_this_start_addr+12), _mm256_loadu_pd(b_this_start_addr+12), vecs[3]);
     }
+
     for (int i = n / 16 * 16; i < n; i++) {
         sum += a[i] * b[i];
     }
+
     for (int i = 0; i < 4; i++) {
-        _mm256_storeu_pd(vals, vector[i]);
-        sum += vals[0] + vals[1] + vals[2] + vals[3];
+        _mm256_storeu_pd(mem_vals, vecs[i]);
+        sum += mem_vals[0] + mem_vals[1] + mem_vals[2] + mem_vals[3];
     }
+
     return sum;
 }
 
@@ -284,10 +316,10 @@ int mul_matrix(matrix *result, matrix *mat1, matrix *mat2) {
     if (mat1->cols != mat2->rows || result->rows != mat1->rows || result->cols != mat2->cols) {
         return -1;
     }
-    int rows, K, cols;
-    rows = mat1->rows;
-    K = mat1->cols;
-    cols = mat2->cols;
+
+    int rows = mat1->rows;
+    int K = mat1->cols;
+    int cols = mat2->cols;
 
     // transposing
     matrix *mat2_transpose;
@@ -302,16 +334,36 @@ int mul_matrix(matrix *result, matrix *mat1, matrix *mat2) {
         }
 
 #pragma omp barrier
-// The omp barrier directive identifies a synchronization point at which threads in a parallel region will wait until all other threads in that section reach the same point. 
-// Statement execution past the omp barrier point then continues in parallel.
+// The omp barrier directive identifies a synchronization point at which threads in a parallel region will wait until all other threads in that section reach the same point. Statement execution past the omp barrier point then continues in parallel.
     #pragma omp for
     for (int i = 0; i < rows; i++)
         for (int j = 0; j < cols; j++) {
-            result->data[i * cols + j] = dot_product(mat1->data + i * K, mat2_transpose->data + j * K, K);
+            result->data[i * cols + j] = dot_prod(mat1->data + i * K, mat2_transpose->data + j * K, K);
         }
 }
     deallocate_matrix(mat2_transpose);
     return 0;
+}
+// Helper function for power function
+void copy_matrix(matrix *des, matrix *src) {
+    int stride = 16;
+    int length = src->rows * src->cols;
+
+#pragma omp parallel num_threads(8)
+{        
+    double *des_addr, *src_addr;
+    for (int i = 0; i < length / stride * stride; i += stride) {
+        des_addr = des->data + i;
+        src_addr = src->data + i;
+        _mm256_storeu_pd(des_addr, _mm256_loadu_pd(src_addr));
+        _mm256_storeu_pd(des_addr + 4, _mm256_loadu_pd(src_addr + 4));   
+        _mm256_storeu_pd(des_addr + 8, _mm256_loadu_pd(src_addr + 8));  
+        _mm256_storeu_pd(des_addr + 12, _mm256_loadu_pd(src_addr + 12));    
+    }
+}
+    for (int i = length / stride * stride; i < length; ++i) {
+        *(des->data + i) = *(src->data + i);
+    }
 }
 
 /*
@@ -322,31 +374,31 @@ int mul_matrix(matrix *result, matrix *mat1, matrix *mat2) {
 int pow_matrix(matrix *result, matrix *mat, int pow) {
     /* TODO: YOUR CODE HERE */
 
-    matrix* tmp;
-    allocate_matrix(&tmp, result->rows, result->cols);
-    matrix* cur;
-    allocate_matrix(&cur, result->rows, result->cols);
+    matrix* tmp_mat;
+    allocate_matrix(&tmp_mat, result->rows, result->cols);
+    matrix* mat_ith_pow;
+    allocate_matrix(&mat_ith_pow, result->rows, result->cols);
 
     fill_matrix(result, 0);
     for (int i = 0; i < mat->rows; i++) {
         set(result, i, i, 1);
     }
-    memcpy(cur->data, mat->data, mat->rows * mat->cols * 8);
+    copy_matrix(mat_ith_pow, mat);
 
-    int is_bit_set;
+    int log;
     while (pow > 0) {
-        is_bit_set = pow & 0x01;
-        if (is_bit_set) {
-            memcpy(tmp->data, result->data, result->rows * result->cols * 8);
-            mul_matrix(result, tmp, cur);
+        log = pow & 0x01;
+        if (log) {
+            copy_matrix(tmp_mat, result);
+            mul_matrix(result, tmp_mat, mat_ith_pow);
         }
         pow = pow >> 1;
-        memcpy(tmp->data, result->data, result->rows * result->cols * 8);
-        mul_matrix(cur, tmp, tmp);
+        copy_matrix(tmp_mat, mat_ith_pow);
+        mul_matrix(mat_ith_pow, tmp_mat, tmp_mat);
     }
 
-    deallocate_matrix(cur);
-    deallocate_matrix(tmp);
+    deallocate_matrix(mat_ith_pow);
+    deallocate_matrix(tmp_mat);
 
     return 0;
 }
