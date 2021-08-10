@@ -12,15 +12,6 @@
 #include <x86intrin.h>
 #endif
 
-// #include <execinfo.h>
-// #include <signal.h>
-
-#define BUF_LEN 100
-
-#define LOG_INFO 0
-#define LOG_WARN 1
-#define LOG_ERRO 2
-
 /* Below are some intel intrinsics that might be useful
  * void _mm256_storeu_pd (double * mem_addr, __m256d a)
  * __m256d _mm256_set1_pd (double a)
