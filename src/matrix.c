@@ -175,13 +175,10 @@ void fill_matrix(matrix *mat, double val) {
     /* TODO: YOUR CODE HERE */
     int stride = 16;
     double vals[4] = {val, val, val, val};
-    __m256d vecs[4] = {_mm256_loadu_pd(vals), _mm256_loadu_pd(vals),  _mm256_loadu_pd(vals), _mm256_loadu_pd(vals)};
+    __m256d vector[4] = {_mm256_loadu_pd(vals), _mm256_loadu_pd(vals),  _mm256_loadu_pd(vals), _mm256_loadu_pd(vals)};
 
 #pragma omp parallel num_threads(8)
 {
-    __m256d vector[4];
-    double* mat1Addr;
-    double* mat2Addr;
     double* resultAddr;
     #pragma omp for
     for(int i = 0; i < mat->rows * mat->cols / stride * stride; i += stride) {
@@ -195,8 +192,6 @@ void fill_matrix(matrix *mat, double val) {
     for (int i = mat->rows * mat->cols / stride * stride; i < mat->rows * mat->cols; i++) {
         *(mat->data + i) = val;
     }
-
-    return 0;
 }
 
 
@@ -276,10 +271,10 @@ double dot_product(double* a, double* b, int n) {
         double* vA_addr = a + i;
         double* vB_addr = b + i;
 
-        vector[0] = _mm256_fmadd_pd(_mm256_loadu_pd(vA_addr), _mm256_loadu_pd(vB_addr), vector);
-        vector[1] = _mm256_fmadd_pd(_mm256_loadu_pd(vA_addr + 4), _mm256_loadu_pd(vB_addr + 4), vector + 8);
-        vector[2] = _mm256_fmadd_pd(_mm256_loadu_pd(vA_addr + 8), _mm256_loadu_pd(vB_addr + 8), vector + 16);
-        vector[3] = _mm256_fmadd_pd(_mm256_loadu_pd(vA_addr + 12), _mm256_loadu_pd(vB_addr + 12), vector + 24);
+        vector[0] = _mm256_fmadd_pd(_mm256_loadu_pd(vA_addr), _mm256_loadu_pd(vB_addr), vector[0]);
+        vector[1] = _mm256_fmadd_pd(_mm256_loadu_pd(vA_addr + 4), _mm256_loadu_pd(vB_addr + 4), vector[1]);
+        vector[2] = _mm256_fmadd_pd(_mm256_loadu_pd(vA_addr + 8), _mm256_loadu_pd(vB_addr + 8), vector[2]);
+        vector[3] = _mm256_fmadd_pd(_mm256_loadu_pd(vA_addr + 12), _mm256_loadu_pd(vB_addr + 12), vector[3]);
     }
 
     for (int i = n / 16 * 16; i < n; i++) {
@@ -501,10 +496,11 @@ int pow_matrix(matrix *result, matrix *mat, int pow) {
     allocate_matrix(&tmp, result->rows, result->cols);
     allocate_matrix(&cur, result->rows, result->cols);   
 
-    // fill_matrix(result, 0);
+    fill_matrix(result, 0);
     for (int i = 0; i < mat->rows; ++i) {
         *(result->data + i * mat->cols + i) = 1;
     }
+    // fill_matrix(result, 1);
     // copy_matrix(tmp, mat);
     // memcpy(tmp->data, mat->data, tmp->cols * tmp->rows * sizeof(double));
     // copy_matrix(cur, mat);
